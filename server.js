@@ -1,6 +1,9 @@
 const app = require("./app")
 const config = require("./app/config")
+const connection = require("./app/utils/mongodb.util")
 
+// Connect to server
+connection(config.db.uri);
 // Start server
 const PORT = config.app.port;
 app.listen(PORT, () => {
