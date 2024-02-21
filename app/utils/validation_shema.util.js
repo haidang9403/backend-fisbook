@@ -11,7 +11,12 @@ const authSchema =
     login: Joi.object({
         username: Joi.string().min(6).required(),
         password: Joi.string().min(6).required(),
-    })
+    }),
+    registerAdmin: Joi.object({
+        fullname: Joi.string().required(),
+        username: Joi.string().min(6).required(),
+        password: Joi.string().min(6).required(),
+    }),
 }
 
 module.exports = {
