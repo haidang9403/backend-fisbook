@@ -2,19 +2,18 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 
-const authRoute = require("./app/routes/auth.route");
+const mainRouter = require("./app/routes/");
 const ApiError = require("./app/api-error");
-
 
 const app = express();
 
 app.use(cors());
 app.use(cookieParser());
 app.use(express.json());
+app.use(express.static("public"));
 
-
-// Routes
-app.use("/api/bookstore", authRoute);
+// Router
+app.use("/api/bookstore", mainRouter);
 
 // Handle not found 404
 app.use((req, res, next) => {

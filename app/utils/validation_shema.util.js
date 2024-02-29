@@ -19,6 +19,29 @@ const authSchema =
     }),
 }
 
+const bookSchema =
+{
+    update: Joi.object({
+        title: Joi.string(),
+        img: Joi.string(),
+        price: Joi.number(),
+        amount: Joi.number(),
+        author: Joi.string(),
+        category: Joi.string(),
+        publisher: Joi.string(),
+    }),
+    add: Joi.object({
+        title: Joi.string().required(),
+        img: Joi.string().required(),
+        price: Joi.number(),
+        amount: Joi.number(),
+        author: Joi.string(),
+        category: Joi.string(),
+        publisher: Joi.string(),
+    })
+}
+
 module.exports = {
     authSchema,
+    bookSchema,
 }
