@@ -14,7 +14,7 @@ const isImage = (req, file, callback) => {
     if (file.mimetype.startsWith("image")) {
         callback(null, true)
     } else {
-        callback(new ApiError(400, "Only image is allowed"))
+        callback(new ApiError(400, "Chỉ chấp nhận tập tin hình ảnh"))
     }
 }
 

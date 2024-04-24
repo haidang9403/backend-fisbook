@@ -1,14 +1,46 @@
 const Book = require("../models/book.model");
+const Author = require("../models/author.model")
 const fs = require("fs");
 const config = require("../config/index");
 const ApiError = require("../api-error");
-const { bookSchema } = require("../utils/validation_shema.util");
+const { bookSchema, errorValidateAll } = require("../utils/validation_shema.util");
+const stringSimilarity = require("string-similarity");
 
 const bookController = {
     // GET ALL BOOKS
     getAll: async (req, res, next) => {
         try {
-            const books = await Book.find();
+            const { sort, limit, random, _neId, ...filter } = req.query;
+
+            let conditions = {};
+            let randomSkip = 0;
+            let query = {
+                ...filter
+            }
+            if (random === 'true') {
+                const totalItems = await Book.countDocuments(filter);
+                const maxRandomSkip = Math.max(totalItems - parseInt(limit), 0);
+                randomSkip = Math.floor(Math.random() * (maxRandomSkip + 1));
+            }
+            if (sort) {
+                const sortArray = sort.split(",").map(condition => condition.trim());
+                sortArray.forEach(condition => {
+                    const [field, order] = condition.split(' ');
+                    conditions[field] = order === 'asc' ? 1 : -1;
+                });
+            }
+            if (_neId) {
+                query = {
+                    ...query,
+                    _id: { $ne: _neId }
+                }
+            }
+
+            const books = await Book.find(query)
+                .populate('author', 'fullname')
+                .populate('category', 'title')
+                .populate('publisher', 'name').sort(conditions).limit(limit).skip(randomSkip);
+
             res.send(books);
         } catch (error) {
             next(error);
@@ -17,25 +49,32 @@ const bookController = {
     // ADD BOOK
     add: async (req, res, next) => {
         try {
-            const { filename } = req.file;
-            img = config.upload.baseUrl + filename;
+            let img
+            const filename = req.file?.filename;
+            if (filename) {
+                img = config.upload.baseUrl + filename;
+            } else img = '';
 
-            const result = await bookSchema.add.validateAsync({ ...req.body, img });
+            const result = await bookSchema.validate.validate({ ...req.body, img }, { abortEarly: false });
             const book = new Book(result);
             const savedBook = await book.save();
-            res.send(savedBook);
+            return res.send(savedBook);
         } catch (error) {
-            if (error.isJoi) {
-                error.statusCode = 400;
+            if (req.file) {
+                fs.unlink(req.file.path, (errFs) => {
+                    if (errFs) {
+                        return next(error)
+                    }
+                })
             }
 
-            fs.unlink(req.file.path, (errFs) => {
-                if (errFs) {
-                    next(error)
-                }
-            })
+            if (error.name === "ValidationError") {
+                errorValidateAll(res, error);
+            } else {
+                return next(error)
+            }
 
-            next(error)
+
         }
     },
     // DELETE BOOK
@@ -67,7 +106,11 @@ const bookController = {
             const bookId = req.params.id;
             if (!bookId) throw next(new ApiError(400, "Id book invalid"));
 
-            const book = await Book.findById(bookId);
+            const book = await Book.findById(bookId)
+                .populate('author', 'fullname')
+                .populate('category', 'title')
+                .populate('publisher', 'name');
+
             if (!book) throw next(new ApiError(404, "Book not found"));
 
             res.send(book);
@@ -75,22 +118,27 @@ const bookController = {
             next(err);
         }
     },
+    // UPDATE BOOK
     update: async (req, res, next) => {
         try {
+            const id = req.params.id;
             // Handle img
             const filename = req.file ? req.file.filename : undefined;
+            let img = ''
             if (filename) {
                 img = config.upload.baseUrl + filename;
                 req.body = {
                     ...req.body,
                     img,
                 }
+            } else {
+                img = (await Book.findById(id))._doc.img;
             }
 
             // Validate data
-            const id = req.params.id;
-            if (!id) throw next(new ApiError(404, "Id book not empty"));
-            const result = await bookSchema.update.validateAsync(req.body);
+            if (!id) throw new ApiError(404, "Id book not empty");
+            const result = await bookSchema.validate.validate({ ...req.body, img }, { abortEarly: false });
+
 
             // Update
             const bookUpdated = await Book.findByIdAndUpdate(id, result);
@@ -102,7 +150,7 @@ const bookController = {
                         };
                     }) // If can't update book, then remove new img
                 }
-                throw next(new ApiError(404, "Book not found"));
+                next(new ApiError(404, "Book not found"));
             }
 
             // Update successful
@@ -119,12 +167,70 @@ const bookController = {
 
             const bookUpdateAfter = await Book.findById(id);
             res.send(bookUpdateAfter);
-        } catch (err) {
-            if (err.isJoi) {
-                err.statusCode = 400;
-                err.message = "Can't update book";
+        } catch (error) {
+            if (req.file) {
+                fs.unlink(req.file.path, (errFs) => {
+                    if (errFs) {
+                        return next(errFs)
+                    }
+                })
             }
-            next(err)
+
+            if (error.name === "ValidationError") {
+                errorValidateAll(res, error);
+            } else {
+                return next(error)
+            }
+        }
+    },
+    // GET BOOK BY AUTHOR
+    getByAuthor: async (req, res, next) => {
+        try {
+            const { _id: id, fullname } = req.query;
+            let isQuery = false;
+            let bookFilter;
+            let authorQuery = {};
+
+            // Nếu có _id được cung cấp trong query, tìm kiếm và trả về
+            if (id) {
+                isQuery = true;
+                // Chuyển id thành mảng nếu nó không phải là mảng
+                const ids = Array.isArray(id) ? id : [id];
+                // Thêm điều kiện tìm kiếm vào query
+                bookFilter = await Book.find({ author: ids }).populate("author");
+            } else {
+                // Nếu có fullname được cung cấp trong query, thêm vào điều kiện tìm kiếm
+                if (fullname) {
+                    isQuery = true
+                    // Chuyển fullname thành mảng nếu nó không phải là mảng
+                    const fullnames = Array.isArray(fullname) ? fullname : [fullname];
+                    // Tạo mảng các tên gần đúng
+                    const authors = await Author.find({}, 'fullname');
+                    const allMatches = fullnames.map(singleFullname => {
+                        const matches = stringSimilarity.findBestMatch(singleFullname, authors.map(author => author.fullname));
+                        const threshold = 0.2; // Ngưỡng tương đồng
+                        return matches.ratings.filter(match => match.rating >= threshold).map(match => match.target);
+                    });
+                    // Gộp các tên gần đúng lại thành một mảng duy nhất
+                    const bestMatches = allMatches.reduce((acc, curr) => acc.concat(curr), []);
+                    // Thêm điều kiện tìm kiếm vào query
+                    authorQuery.fullname = { $in: bestMatches };
+                }
+
+                // Nếu không có cả _id và fullname, không cần thêm điều kiện tìm kiếm về tác giả
+
+                // Tiến hành tìm kiếm sách dựa trên các điều kiện tìm kiếm về tác giả
+                const matchedAuthors = await Author.find(authorQuery);
+                const authorIds = matchedAuthors.map(author => author._id);
+
+                // Nếu không có cả _id và fullname, không cần thêm điều kiện tìm kiếm về tác giả
+                bookFilter = isQuery ? await Book.find({ author: { $in: authorIds } }).populate('author') : await Book.find().populate('author');
+            }
+
+            // Trả về danh sách sách tìm thấy
+            res.send(bookFilter);
+        } catch (err) {
+            next(err);
         }
     }
 }

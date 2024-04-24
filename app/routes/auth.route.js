@@ -1,6 +1,6 @@
 const express = require("express");
 const authController = require("../controllers/auth.controller");
-const { verifyAccessToken, verifyAccessTokenAndAdmin } = require("../utils/jwt.util");
+const { verifyAccessTokenAndAuth, verifyRefreshToken, verifyAccessTokenAndAdmin, verifyRefreshTokenAndAdmin } = require("../utils/jwt.util");
 
 const authRoute = express.Router();
 
@@ -11,7 +11,9 @@ authRoute.post("/login", authController.login);
 
 authRoute.post("/refresh-token", authController.refreshToken);
 
-authRoute.post("/logout", verifyAccessToken, authController.logout);
+authRoute.post("/logout", verifyRefreshToken, authController.logout);
+
+authRoute.post("/change-password/:id", verifyAccessTokenAndAuth, authController.changePassword)
 
 // Admin
 authRoute.post("/admin/login", authController.adminLogin);
@@ -20,6 +22,9 @@ authRoute.post("/admin/register", verifyAccessTokenAndAdmin, authController.admi
 
 authRoute.post("/admin/refresh-token", authController.refreshTokenAdmin);
 
-authRoute.post("/admin/logout", verifyAccessTokenAndAdmin, authController.adminLogout);
+authRoute.post("/admin/logout", verifyRefreshTokenAndAdmin, authController.adminLogout);
+
+authRoute.get("/admin/get-token", authController.getRefeshToken);
+authRoute.get("/get-token", authController.getRefreshTokenUser);
 
 module.exports = authRoute;

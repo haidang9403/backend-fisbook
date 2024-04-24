@@ -24,7 +24,8 @@ const adminSchema = new Schema({
         type: String,
     },
     position: {
-        type: String
+        type: Number,
+        enum: [0, 1],
     }
 },
     { timestamps: true }

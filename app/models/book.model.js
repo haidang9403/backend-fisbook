@@ -12,7 +12,7 @@ const bookSchema = new Schema({
     },
     price: {
         type: Number,
-        min: 0,
+        require: true,
     },
     amount: {
         type: Number,
@@ -22,14 +22,17 @@ const bookSchema = new Schema({
     author: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "authors",
+        required: true,
     },
     publisher: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "publishers",
+        required: true,
     },
     category: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "categories",
+        required: true,
     },
 },
     { timestamps: true }
